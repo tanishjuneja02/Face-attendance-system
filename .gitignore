@@ -1,0 +1,7 @@
+venv/
+temp_frame.jpg
+temp_scan.jpg
+test_photo.jpg
+__pycache__/
+attendance_system.db
+known_faces/
