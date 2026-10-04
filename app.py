@@ -15,6 +15,7 @@ st.markdown("""
     h1 {
         color: #4CAF50;
     }
+
     .stButton button {
         border-radius: 8px;
         font-weight: 600;
@@ -29,6 +30,54 @@ DB_FILE = "attendance_system.db"
 
 def get_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False, timeout=10)
+
+def init_db():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin', 'teacher', 'student')),
+            full_name TEXT NOT NULL,
+            is_deleted INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS subjects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            subject_id INTEGER REFERENCES subjects(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    for subject in ["Mathematics", "Physics", "Chemistry", "English", "Computer Science"]:
+        cursor.execute("SELECT * FROM subjects WHERE name = ?", (subject,))
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO subjects (name) VALUES (?)", (subject,))
+
+    cursor.execute("SELECT * FROM users WHERE username = 'admin'")
+    if not cursor.fetchone():
+        cursor.execute("""
+            INSERT INTO users (username, password, role, full_name, is_deleted)
+            VALUES (?, ?, ?, ?, 0)
+        """, ("admin", "admin123", "admin", "System Admin"))
+
+    conn.commit()
+    conn.close()
+
+init_db()
 
 def check_login(username, password):
     conn = get_connection()
