@@ -1,0 +1,7 @@
+streamlit
+pandas
+opencv-python-headless==4.9.0.80
+numpy<2
+deepface
+tensorflow-cpu
+tf-keras
