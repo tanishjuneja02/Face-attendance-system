@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 
 st.set_page_config(page_title="Face Attendance System", page_icon="🎓", layout="wide")
-
 st.markdown("""
 <style>
     .main { padding-top: 1rem; }
@@ -22,6 +21,14 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] {
         font-size: 28px;
+    }
+    [data-testid="stMetric"] {
+        background-color: rgba(76, 175, 80, 0.08);
+        border-radius: 10px;
+        padding: 10px;
+    }
+    div[data-testid="stExpander"] {
+        border-radius: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -95,7 +102,7 @@ if "logged_in" not in st.session_state:
 # ---------- LOGIN PAGE ----------
 if not st.session_state.logged_in:
     st.title("🎓 Face Attendance System")
-    st.caption("AI-powered attendance tracking with face recognition — Tech Utsav 2026")
+    st.caption(f"📅 {datetime.now().strftime('%A, %d %B %Y')}")
     st.divider()
     st.subheader("🔐 Login")
 
@@ -132,62 +139,61 @@ else:
         st.session_state.user = None
         st.rerun()
 
-    st.title("📋 Face Attendance System")
-
     if user["role"] == "admin":
         st.header("Admin Dashboard")
         st.caption("Manage users, register faces, and monitor attendance across the institution.")
 
         tab1, tab2, tab3 = st.tabs(["👥 Manage Users", "📸 Register Face", "📊 All Attendance"])
         with tab1:
-            st.subheader("Add New User")
+            with st.expander("➕ Add New User", expanded=False):
+                face_method = st.radio(
+                    "How do you want to capture their face?",
+                    ["Upload a photo", "Use camera"],
+                    key="face_method_choice"
+                )
 
-            face_method = st.radio(
-                "How do you want to capture their face?",
-                ["Upload a photo", "Use camera"],
-                key="face_method_choice"
-            )
+                with st.form("add_user_form"):
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        new_username = st.text_input("Username")
+                    with col_b:
+                        new_password = st.text_input("Password")
+                    new_fullname = st.text_input("Full Name")
+                    new_role = st.selectbox("Role", ["student", "teacher", "admin"])
 
-            with st.form("add_user_form"):
-                new_username = st.text_input("Username")
-                new_password = st.text_input("Password")
-                new_fullname = st.text_input("Full Name")
-                new_role = st.selectbox("Role", ["student", "teacher", "admin"])
-
-                if face_method == "Upload a photo":
-                    face_file = st.file_uploader("Upload a clear face photo", type=["jpg", "jpeg", "png"])
-                else:
-                    face_file = st.camera_input("Take a photo of the person's face")
-
-                add_submitted = st.form_submit_button("Add User")
-
-                if add_submitted:
-                    if new_username and new_password and new_fullname:
-                        if face_file is None:
-                            st.warning("Please provide a face photo (upload or camera) before adding the user.")
-                        else:
-                            conn = get_connection()
-                            cursor = conn.cursor()
-                            try:
-                                cursor.execute(
-                                    "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
-                                    (new_username, new_password, new_role, new_fullname)
-                                )
-                                conn.commit()
-
-                                os.makedirs("known_faces", exist_ok=True)
-                                filepath = f"known_faces/{new_username}.jpg"
-                                with open(filepath, "wb") as f:
-                                    f.write(face_file.getbuffer())
-
-                                st.success(f"User '{new_username}' added as {new_role}, with face registered.")
-                            except sqlite3.IntegrityError:
-                                st.error("Username already exists.")
-                            conn.close()
+                    if face_method == "Upload a photo":
+                        face_file = st.file_uploader("Upload a clear face photo", type=["jpg", "jpeg", "png"])
                     else:
-                        st.warning("Please fill in all fields.")
+                        face_file = st.camera_input("Take a photo of the person's face")
 
-                st.divider()
+                    add_submitted = st.form_submit_button("Add User")
+
+                    if add_submitted:
+                        if new_username and new_password and new_fullname:
+                            if face_file is None:
+                                st.warning("Please provide a face photo (upload or camera) before adding the user.")
+                            else:
+                                conn = get_connection()
+                                cursor = conn.cursor()
+                                try:
+                                    cursor.execute(
+                                        "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
+                                        (new_username, new_password, new_role, new_fullname)
+                                    )
+                                    conn.commit()
+
+                                    os.makedirs("known_faces", exist_ok=True)
+                                    filepath = f"known_faces/{new_username}.jpg"
+                                    with open(filepath, "wb") as f:
+                                        f.write(face_file.getbuffer())
+
+                                    st.success(f"User '{new_username}' added as {new_role}, with face registered.")
+                                except sqlite3.IntegrityError:
+                                    st.error("Username already exists.")
+                                conn.close()
+                        else:
+                            st.warning("Please fill in all fields.")
+
             st.divider()
             st.subheader("Existing Users")
             conn = get_connection()
@@ -195,6 +201,11 @@ else:
                 "SELECT id, username, full_name, role FROM users WHERE is_deleted = 0", conn
             )
             conn.close()
+
+            users_df["full_name"] = users_df.apply(
+                lambda r: f"{'👑' if r['role']=='admin' else '🧑‍🏫' if r['role']=='teacher' else '🎓'} {r['full_name']}", axis=1
+            )
+
             st.dataframe(users_df, use_container_width=True, hide_index=True)
 
             st.divider()
@@ -377,51 +388,54 @@ else:
 
         # ---- TAB 1: Mark Attendance ----
         with tab1:
-            st.subheader("Mark Attendance for a Subject")
+            with st.expander("✅ Mark Attendance for a Subject", expanded=True):
+                conn = get_connection()
+                subjects_df = pd.read_sql_query("SELECT id, name FROM subjects", conn)
+                students_df = pd.read_sql_query("SELECT id, full_name FROM users WHERE role = 'student'", conn)
+                conn.close()
 
-            conn = get_connection()
-            subjects_df = pd.read_sql_query("SELECT id, name FROM subjects", conn)
-            students_df = pd.read_sql_query("SELECT id, full_name FROM users WHERE role = 'student'", conn)
-            conn.close()
+                selected_subject = st.selectbox(
+                    "Select Subject",
+                    options=subjects_df["id"],
+                    format_func=lambda x: subjects_df[subjects_df["id"] == x]["name"].values[0]
+                )
 
-            selected_subject = st.selectbox(
-                "Select Subject",
-                options=subjects_df["id"],
-                format_func=lambda x: subjects_df[subjects_df["id"] == x]["name"].values[0]
-            )
+                selected_students = st.multiselect(
+                    "Select Students Present Today",
+                    options=students_df["id"],
+                    format_func=lambda x: students_df[students_df["id"] == x]["full_name"].values[0]
+                )
 
-            selected_students = st.multiselect(
-                "Select Students Present Today",
-                options=students_df["id"],
-                format_func=lambda x: students_df[students_df["id"] == x]["full_name"].values[0]
-            )
+                if st.button("Mark Attendance"):
+                    if selected_students:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        now = datetime.now()
+                        today = now.strftime("%Y-%m-%d")
+                        time_now = now.strftime("%H:%M:%S")
 
-            if st.button("Mark Attendance"):
-                if selected_students:
-                    conn = get_connection()
-                    cursor = conn.cursor()
-                    now = datetime.now()
-                    today = now.strftime("%Y-%m-%d")
-                    time_now = now.strftime("%H:%M:%S")
-
-                    marked_count = 0
-                    for student_id in selected_students:
-                        cursor.execute("""
-                            SELECT * FROM attendance
-                            WHERE user_id = ? AND subject_id = ? AND date = ?
-                        """, (student_id, selected_subject, today))
-                        if not cursor.fetchone():
+                        marked_count = 0
+                        for student_id in selected_students:
                             cursor.execute("""
-                                INSERT INTO attendance (user_id, date, time, subject_id)
-                                VALUES (?, ?, ?, ?)
-                            """, (student_id, today, time_now, selected_subject))
-                            marked_count += 1
+                                SELECT * FROM attendance
+                                WHERE user_id = ? AND subject_id = ? AND date = ?
+                            """, (student_id, selected_subject, today))
+                            if not cursor.fetchone():
+                                cursor.execute("""
+                                    INSERT INTO attendance (user_id, date, time, subject_id)
+                                    VALUES (?, ?, ?, ?)
+                                """, (student_id, today, time_now, selected_subject))
+                                marked_count += 1
+
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Attendance marked for {marked_count} student(s).")
+                    else:
+                        st.warning("Select at least one student.")
 
                     conn.commit()
                     conn.close()
                     st.success(f"Attendance marked for {marked_count} student(s).")
-                else:
-                    st.warning("Select at least one student.")
 
         # ---- TAB 2: Register Face ----
         with tab2:
@@ -465,98 +479,99 @@ else:
         st.header("Student Dashboard")
         st.caption("Scan your face to mark attendance and track your progress by subject.")
 
-        # ---- Scan My Attendance ----
-        st.subheader("📷 Scan My Attendance")
-
-        conn = get_connection()
-        subjects_df = pd.read_sql_query("SELECT id, name FROM subjects", conn)
-        conn.close()
-
-        scan_subject = st.selectbox(
-            "Select Subject",
-            options=subjects_df["id"],
-            format_func=lambda x: subjects_df[subjects_df["id"] == x]["name"].values[0],
-            key="scan_subject"
+        tab_scan, tab_overview, tab_subjects, tab_calendar = st.tabs(
+            ["📷 Scan Attendance", "📊 Overview", "📚 By Subject", "📅 Calendar & Log"]
         )
 
-        if "show_camera" not in st.session_state:
-            st.session_state.show_camera = True
+        with tab_scan:
+            st.subheader("Scan My Attendance")
 
-        col_cam_toggle, _ = st.columns([1, 4])
-        with col_cam_toggle:
-            if st.session_state.show_camera:
-                if st.button("🛑 Stop Camera"):
-                    st.session_state.show_camera = False
-                    st.rerun()
-            else:
-                if st.button("📷 Start Camera"):
+            conn = get_connection()
+            subjects_df = pd.read_sql_query("SELECT id, name FROM subjects", conn)
+            conn.close()
+
+            scan_subject = st.selectbox(
+                    "Select Subject",
+                    options=subjects_df["id"],
+                    format_func=lambda x: subjects_df[subjects_df["id"] == x]["name"].values[0],
+                    key="scan_subject"
+                )
+
+            if "show_camera" not in st.session_state:
                     st.session_state.show_camera = True
-                    st.rerun()
 
-        captured_photo = None
-        if st.session_state.show_camera:
-            captured_photo = st.camera_input("Take a photo to mark your attendance")
-
-
-
-        if captured_photo is not None:
-            known_path = f"known_faces/{user['username']}.jpg"
-
-            if not os.path.exists(known_path):
-                st.error("No registered face found for your account. Ask admin/teacher to register your face first.")
-            else:
-                with open("temp_scan.jpg", "wb") as f:
-                    f.write(captured_photo.getbuffer())
-
-                with st.spinner("Verifying your face..."):
-                    from deepface import DeepFace
-                    try:
-                        result = DeepFace.verify(
-                            img1_path="temp_scan.jpg",
-                            img2_path=known_path,
-                            enforce_detection=False,
-                            detector_backend="mtcnn"
-                        )
-                    except Exception as e:
-                        result = None
-                        st.error(f"Face verification failed: {e}")
-
-                if result:
-                    if result["verified"]:
-                        today = datetime.now().strftime("%Y-%m-%d")
-                        time_now = datetime.now().strftime("%H:%M:%S")
-
-                        conn = get_connection()
-                        cursor = conn.cursor()
-                        cursor.execute("""
-                            SELECT * FROM attendance
-                            WHERE user_id = ? AND subject_id = ? AND date = ?
-                        """, (user["id"], scan_subject, today))
-
-                        if cursor.fetchone():
-                            st.warning("You've already marked attendance for this subject today.")
-                        else:
-                            cursor.execute("""
-                                INSERT INTO attendance (user_id, subject_id, date, time)
-                                VALUES (?, ?, ?, ?)
-                            """, (user["id"], scan_subject, today, time_now))
-                            conn.commit()
-                            st.toast("Attendance marked successfully!", icon="🎉")
-                            st.success("✅ Attendance marked successfully for today!")
-                            st.balloons()
+            col_cam_toggle, _ = st.columns([1, 4])
+            with col_cam_toggle:
+                    if st.session_state.show_camera:
+                        if st.button("🛑 Stop Camera"):
                             st.session_state.show_camera = False
-                            conn.close()
+                            st.rerun()
                     else:
-                        st.error("Face did not match your registered photo. Try again with better lighting.")
+                        if st.button("📷 Start Camera"):
+                            st.session_state.show_camera = True
+                            st.rerun()
 
-                if os.path.exists("temp_scan.jpg"):
-                    os.remove("temp_scan.jpg")
+                    captured_photo = None
+            if st.session_state.show_camera:
+                    captured_photo = st.camera_input("Take a photo to mark your attendance")
 
-        st.divider()
 
-        conn = get_connection()
 
-        # This student's own attendance records
+            if captured_photo is not None:
+                    known_path = f"known_faces/{user['username']}.jpg"
+
+                    if not os.path.exists(known_path):
+                        st.error("No registered face found for your account. Ask admin/teacher to register your face first.")
+                    else:
+                        with open("temp_scan.jpg", "wb") as f:
+                            f.write(captured_photo.getbuffer())
+
+                        with st.spinner("Verifying your face..."):
+                            from deepface import DeepFace
+                            try:
+                                result = DeepFace.verify(
+                                    img1_path="temp_scan.jpg",
+                                    img2_path=known_path,
+                                    enforce_detection=False,
+                                    detector_backend="mtcnn"
+                                )
+                            except Exception as e:
+                                result = None
+                                st.error(f"Face verification failed: {e}")
+
+                        if result:
+                            if result["verified"]:
+                                today = datetime.now().strftime("%Y-%m-%d")
+                                time_now = datetime.now().strftime("%H:%M:%S")
+
+                                conn = get_connection()
+                                cursor = conn.cursor()
+                                cursor.execute("""
+                                    SELECT * FROM attendance
+                                    WHERE user_id = ? AND subject_id = ? AND date = ?
+                                """, (user["id"], scan_subject, today))
+
+                                if cursor.fetchone():
+                                    st.warning("You've already marked attendance for this subject today.")
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO attendance (user_id, subject_id, date, time)
+                                        VALUES (?, ?, ?, ?)
+                                    """, (user["id"], scan_subject, today, time_now))
+                                    conn.commit()
+                                    st.toast("Attendance marked successfully!", icon="🎉")
+                                    st.success("✅ Attendance marked successfully for today!")
+                                    st.balloons()
+                                    st.session_state.show_camera = False
+                                    conn.close()
+                            else:
+                                st.error("Face did not match your registered photo. Try again with better lighting.")
+
+                        if os.path.exists("temp_scan.jpg"):
+                            os.remove("temp_scan.jpg")
+
+               # Load data once, used across tabs
+            conn = get_connection()
         my_attendance = pd.read_sql_query("""
             SELECT subjects.name AS subject, attendance.date, attendance.time
             FROM attendance
@@ -565,7 +580,6 @@ else:
             ORDER BY attendance.date DESC
         """, conn, params=(user["id"],))
 
-        # Classes held = distinct dates on which anyone was marked for that subject
         held = pd.read_sql_query("""
             SELECT subjects.name AS subject,
                    COUNT(DISTINCT attendance.date) AS classes_held
@@ -575,62 +589,73 @@ else:
         """, conn)
         conn.close()
 
-        if held.empty:
-            st.info("No classes have been held yet.")
-        else:
-            # ---- Build the subject-wise table ----
-            attended = (
-                my_attendance.groupby("subject")["date"].nunique()
-                .reset_index(name="classes_attended")
-            )
-            summary = held.merge(attended, on="subject", how="left")
-            summary["classes_attended"] = summary["classes_attended"].fillna(0).astype(int)
-            summary["percentage"] = (
-                summary["classes_attended"] / summary["classes_held"] * 100
-            ).round(1)
-
-            total_held = int(summary["classes_held"].sum())
-            total_attended = int(summary["classes_attended"].sum())
-            overall_pct = round(total_attended / total_held * 100, 1) if total_held else 0.0
-
-            # ---- Overall ----
-            st.subheader("📊 Overall Attendance")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Overall Percentage", f"{overall_pct}%")
-            col2.metric("Classes Attended", f"{total_attended} / {total_held}")
-            col3.metric("Subjects", len(summary))
-            st.progress(min(overall_pct / 100, 1.0))
-
-            if overall_pct < 75:
-                st.warning("Your attendance is below 75%.")
+        with tab_overview:
+            if held.empty:
+                st.info("No classes have been held yet.")
             else:
-                st.success("Your attendance is above 75%. Keep it up!")
+                attended = (
+                    my_attendance.groupby("subject")["date"].nunique()
+                    .reset_index(name="classes_attended")
+                )
+                summary = held.merge(attended, on="subject", how="left")
+                summary["classes_attended"] = summary["classes_attended"].fillna(0).astype(int)
+                summary["percentage"] = (
+                    summary["classes_attended"] / summary["classes_held"] * 100
+                ).round(1)
 
-            # ---- Subject-wise ----
-            st.subheader("📚 Attendance by Subject")
-            table = summary.rename(columns={
-                "subject": "Subject",
-                "classes_attended": "Attended",
-                "classes_held": "Held",
-                "percentage": "Percentage (%)",
-            })[["Subject", "Attended", "Held", "Percentage (%)"]]
-            st.dataframe(table, use_container_width=True, hide_index=True)
-            st.bar_chart(table.set_index("Subject")[["Percentage (%)"]])
+                total_held = int(summary["classes_held"].sum())
+                total_attended = int(summary["classes_attended"].sum())
+                overall_pct = round(total_attended / total_held * 100, 1) if total_held else 0.0
 
-        # ---- Calendar-style view ----
-        if not my_attendance.empty:
-            st.subheader("📅 Attendance Calendar")
-            calendar_df = my_attendance.copy()
-            calendar_df["date"] = pd.to_datetime(calendar_df["date"])
-            calendar_df = calendar_df.sort_values("date", ascending=False)
-            calendar_df["Day"] = calendar_df["date"].dt.strftime("%A")
-            calendar_df["Date"] = calendar_df["date"].dt.strftime("%d %b %Y")
-            st.dataframe(
-                calendar_df[["Date", "Day", "subject", "time"]],
-                use_container_width=True, hide_index=True
-            )
+                st.subheader("📊 Overall Attendance")
+                col1, col2, col3 = st.columns(3)
+                col1.metric(
+                    "Overall Percentage",
+                    f"{overall_pct}%",
+                    delta=f"{overall_pct - 75:.1f}% vs 75% target",
+                    delta_color="normal" if overall_pct >= 75 else "inverse"
+                )
+                col2.metric("Classes Attended", f"{total_attended} / {total_held}")
+                col3.metric("Subjects", len(summary))
+                st.progress(min(overall_pct / 100, 1.0))
 
-            # ---- Full records ----
-            st.subheader("📋 Full Attendance Log")
-            st.dataframe(my_attendance, use_container_width=True, hide_index=True)
+                if overall_pct < 75:
+                    st.warning("Your attendance is below 75%.")
+                else:
+                    st.success("Your attendance is above 75%. Keep it up!")
+
+        with tab_subjects:
+            if held.empty:
+                st.info("No classes have been held yet.")
+            else:
+                st.subheader("📚 Attendance by Subject")
+                table = summary.rename(columns={
+                    "subject": "Subject",
+                    "classes_attended": "Attended",
+                    "classes_held": "Held",
+                    "percentage": "Percentage (%)",
+                })[["Subject", "Attended", "Held", "Percentage (%)"]]
+                st.dataframe(table, use_container_width=True, hide_index=True)
+                st.bar_chart(table.set_index("Subject")[["Percentage (%)"]])
+
+        with tab_calendar:
+            if my_attendance.empty:
+                st.info("No attendance records yet.")
+            else:
+                st.subheader("📅 Attendance Calendar")
+                calendar_df = my_attendance.copy()
+                calendar_df["date"] = pd.to_datetime(calendar_df["date"])
+                calendar_df = calendar_df.sort_values("date", ascending=False)
+                calendar_df["Day"] = calendar_df["date"].dt.strftime("%A")
+                calendar_df["Date"] = calendar_df["date"].dt.strftime("%d %b %Y")
+                st.dataframe(
+                    calendar_df[["Date", "Day", "subject", "time"]],
+                    use_container_width=True, hide_index=True
+                )
+
+                st.subheader("📋 Full Attendance Log")
+                st.dataframe(my_attendance, use_container_width=True, hide_index=True)
+
        
+    st.divider()
+    st.caption("🎓 SmartAttend — Built for Tech Utsav 2026")
