@@ -161,17 +161,18 @@ else:
                     new_fullname = st.text_input("Full Name")
                     new_role = st.selectbox("Role", ["student", "teacher", "admin"])
 
+                    face_label = "Upload a clear face photo (required for students)" if new_role == "student" else "Upload a face photo (optional)"
                     if face_method == "Upload a photo":
-                        face_file = st.file_uploader("Upload a clear face photo", type=["jpg", "jpeg", "png"])
+                        face_file = st.file_uploader(face_label, type=["jpg", "jpeg", "png"])
                     else:
-                        face_file = st.camera_input("Take a photo of the person's face")
+                        face_file = st.camera_input("Take a photo of the person's face (optional)")
 
                     add_submitted = st.form_submit_button("Add User")
 
                     if add_submitted:
                         if new_username and new_password and new_fullname:
-                            if face_file is None:
-                                st.warning("Please provide a face photo (upload or camera) before adding the user.")
+                            if new_role == "student" and face_file is None:
+                                st.warning("Please provide a face photo for this student before adding them.")
                             else:
                                 conn = get_connection()
                                 cursor = conn.cursor()
@@ -182,12 +183,14 @@ else:
                                     )
                                     conn.commit()
 
-                                    os.makedirs("known_faces", exist_ok=True)
-                                    filepath = f"known_faces/{new_username}.jpg"
-                                    with open(filepath, "wb") as f:
-                                        f.write(face_file.getbuffer())
-
-                                    st.success(f"User '{new_username}' added as {new_role}, with face registered.")
+                                    if face_file is not None:
+                                        os.makedirs("known_faces", exist_ok=True)
+                                        filepath = f"known_faces/{new_username}.jpg"
+                                        with open(filepath, "wb") as f:
+                                            f.write(face_file.getbuffer())
+                                        st.success(f"User '{new_username}' added as {new_role}, with face registered.")
+                                    else:
+                                        st.success(f"User '{new_username}' added as {new_role}.")
                                 except sqlite3.IntegrityError:
                                     st.error("Username already exists.")
                                 conn.close()
