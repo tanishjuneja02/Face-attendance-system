@@ -38,17 +38,27 @@ DB_FILE = "attendance_system.db"
 def get_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False, timeout=10)
 
+
 def init_db():
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-    except sqlite3.DatabaseError:
-        conn.close()
-        if os.path.exists(DB_FILE):
+    # Unconditionally start fresh if the file looks suspicious or on every cold start
+    if os.path.exists(DB_FILE):
+        try:
+            test_conn = sqlite3.connect(DB_FILE)
+            test_cursor = test_conn.cursor()
+            test_cursor.execute("PRAGMA integrity_check")
+            result = test_cursor.fetchone()
+            test_conn.close()
+            if result is None or result[0] != "ok":
+                os.remove(DB_FILE)
+        except sqlite3.DatabaseError:
+            try:
+                test_conn.close()
+            except Exception:
+                pass
             os.remove(DB_FILE)
-        conn = get_connection()
-        cursor = conn.cursor()
+
+    conn = get_connection()
+    cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
