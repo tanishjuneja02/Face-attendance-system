@@ -39,8 +39,16 @@ def get_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False, timeout=10)
 
 def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+    except sqlite3.DatabaseError:
+        conn.close()
+        if os.path.exists(DB_FILE):
+            os.remove(DB_FILE)
+        conn = get_connection()
+        cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
