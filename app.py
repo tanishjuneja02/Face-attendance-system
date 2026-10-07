@@ -2,7 +2,12 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def now_ist():
+    return datetime.now(IST)
 
 st.set_page_config(page_title="Face Attendance System", page_icon="🎓", layout="wide")
 st.markdown("""
@@ -137,7 +142,7 @@ if "logged_in" not in st.session_state:
 # ---------- LOGIN PAGE ----------
 if not st.session_state.logged_in:
     st.title("🎓 Face Attendance System")
-    st.caption(f"📅 {datetime.now().strftime('%A, %d %B %Y')}")
+    st.caption(f"📅 {now_ist().strftime('%A, %d %B %Y')}")
     st.divider()
     st.subheader("🔐 Login")
 
@@ -240,11 +245,14 @@ else:
             )
             conn.close()
 
-            users_df["full_name"] = users_df.apply(
+            users_df["display_name"] = users_df.apply(
                 lambda r: f"{'👑' if r['role']=='admin' else '🧑‍🏫' if r['role']=='teacher' else '🎓'} {r['full_name']}", axis=1
             )
 
-            st.dataframe(users_df, use_container_width=True, hide_index=True)
+            st.dataframe(
+                users_df[["id", "username", "display_name", "role"]].rename(columns={"display_name": "full_name"}),
+                use_container_width=True, hide_index=True
+            )
 
             st.divider()
             st.subheader("✏️ Edit or 🗑️ Delete a User")
@@ -448,7 +456,7 @@ else:
                     if selected_students:
                         conn = get_connection()
                         cursor = conn.cursor()
-                        now = datetime.now()
+                        now = now_ist()
                         today = now.strftime("%Y-%m-%d")
                         time_now = now.strftime("%H:%M:%S")
 
@@ -578,8 +586,8 @@ else:
 
                     if result:
                         if result["verified"]:
-                            today = datetime.now().strftime("%Y-%m-%d")
-                            time_now = datetime.now().strftime("%H:%M:%S")
+                            today = now_ist().strftime("%Y-%m-%d")
+                            time_now = now_ist().strftime("%H:%M:%S")
 
                             conn = get_connection()
                             cursor = conn.cursor()
