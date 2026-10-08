@@ -169,7 +169,7 @@ else:
     # ---------- LOGGED IN ----------
     user = st.session_state.user
 
-    st.sidebar.markdown("### 🎓 Face Attendance")
+    st.sidebar.markdown("### 🎓 SmartAttend")
     st.sidebar.divider()
     st.sidebar.write(f"👤 **{user['full_name']}**")
     st.sidebar.write(f"🏷️ {user['role'].capitalize()}")
@@ -183,7 +183,20 @@ else:
         st.header("Admin Dashboard")
         st.caption("Manage users, register faces, and monitor attendance across the institution.")
 
-        tab1, tab2, tab3 = st.tabs(["👥 Manage Users", "📸 Register Face", "📊 All Attendance"])
+        conn = get_connection()
+        today_str = now_ist().strftime("%Y-%m-%d")
+        today_count = pd.read_sql_query(
+            "SELECT COUNT(*) as c FROM attendance WHERE date = ?", conn, params=(today_str,)
+        )["c"].values[0]
+        total_users = pd.read_sql_query("SELECT COUNT(*) as c FROM users WHERE is_deleted = 0", conn)["c"].values[0]
+        conn.close()
+
+        col1, col2 = st.columns(2)
+        col1.metric("Today's Attendance Marks", int(today_count))
+        col2.metric("Total Active Users", int(total_users))
+        st.divider()
+
+        tab1, tab2 = st.tabs(["👥 Manage Users", "📊 All Attendance"])
         with tab1:
             with st.expander("➕ Add New User", expanded=False):
                 face_method = st.radio(
@@ -392,29 +405,8 @@ else:
 
                         st.success(f"Permanently deleted {restore_row['full_name']}.")
                         st.rerun()
+
         with tab2:
-            st.subheader("Register a Face for a User")
-            conn = get_connection()
-            all_users = pd.read_sql_query("SELECT id, username, full_name FROM users", conn)
-            conn.close()
-
-            selected_user = st.selectbox(
-                "Select User",
-                options=all_users["id"],
-                format_func=lambda x: all_users[all_users["id"] == x]["full_name"].values[0]
-            )
-
-            uploaded_photo = st.file_uploader("Upload a clear face photo", type=["jpg", "jpeg", "png"])
-
-            if uploaded_photo and st.button("Save Face"):
-                username_for_file = all_users[all_users["id"] == selected_user]["username"].values[0]
-                os.makedirs("known_faces", exist_ok=True)
-                filepath = f"known_faces/{username_for_file}.jpg"
-                with open(filepath, "wb") as f:
-                    f.write(uploaded_photo.getbuffer())
-                st.success(f"Face saved for {username_for_file}.")
-
-        with tab3:
             st.subheader("All Attendance Records")
             conn = get_connection()
             att_df = pd.read_sql_query("""
@@ -424,13 +416,17 @@ else:
                 ORDER BY attendance.date DESC, attendance.time DESC
             """, conn)
             conn.close()
+            col1, col2 = st.columns(2)
+            col1.metric("Total Records", len(att_df))
+            col2.metric("Unique Students", att_df["full_name"].nunique() if not att_df.empty else 0)
+
             st.dataframe(att_df, use_container_width=True)
 
     elif user["role"] == "teacher":
         st.header("Teacher Dashboard")
         st.caption("Mark attendance by subject, register student faces, and review records.")
 
-        tab1, tab2, tab3 = st.tabs(["✅ Mark Attendance", "📸 Register Face", "📊 View Attendance"])
+        tab1, tab2 = st.tabs(["✅ Mark Attendance","📊 View Attendance"])
 
         # ---- TAB 1: Mark Attendance ----
         with tab1:
@@ -484,31 +480,10 @@ else:
                     else:
                         st.warning("Select at least one student.")
 
-        # ---- TAB 2: Register Face ----
+
+
+        # ---- TAB 2 : View Attendance ----
         with tab2:
-            st.subheader("Register a Face for a Student")
-            conn = get_connection()
-            all_students = pd.read_sql_query("SELECT id, username, full_name FROM users WHERE role = 'student'", conn)
-            conn.close()
-
-            selected_user = st.selectbox(
-                "Select Student",
-                options=all_students["id"],
-                format_func=lambda x: all_students[all_students["id"] == x]["full_name"].values[0]
-            )
-
-            uploaded_photo = st.file_uploader("Upload a clear face photo", type=["jpg", "jpeg", "png"])
-
-            if uploaded_photo and st.button("Save Face"):
-                username_for_file = all_students[all_students["id"] == selected_user]["username"].values[0]
-                os.makedirs("known_faces", exist_ok=True)
-                filepath = f"known_faces/{username_for_file}.jpg"
-                with open(filepath, "wb") as f:
-                    f.write(uploaded_photo.getbuffer())
-                st.success(f"Face saved for {username_for_file}.")
-
-        # ---- TAB 3: View Attendance ----
-        with tab3:
             st.subheader("Student Attendance Records")
             conn = get_connection()
             att_df = pd.read_sql_query("""
@@ -543,6 +518,8 @@ else:
                 format_func=lambda x: subjects_df[subjects_df["id"] == x]["name"].values[0],
                 key="scan_subject"
             )
+
+            st.info(f"📚 Marking attendance for: **{subjects_df[subjects_df['id'] == scan_subject]['name'].values[0]}**")
 
             if "show_camera" not in st.session_state:
                 st.session_state.show_camera = True
