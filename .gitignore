@@ -1,0 +1,13 @@
+# Private data: never upload student photos or the database
+data/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.DS_Store
