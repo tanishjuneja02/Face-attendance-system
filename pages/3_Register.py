@@ -1,4 +1,6 @@
 """Admin: register students (with face), deactivate/restore/delete them, manage subjects and staff."""
+import os
+
 import streamlit as st
 
 from core import auth, database, face, photos, ui
@@ -45,7 +47,7 @@ with tab_students:
                     raise database.DuplicateError(f"Roll number '{roll_no.strip()}' already exists.")
                 with st.spinner("Reading face..."):
                     image = ui.read_image(image_file)
-                    embedding = face.get_embedding(image)
+                    embedding = face.get_registration_embeddings(image)
                 path = photos.save_photo(roll_no, image)
                 database.add_student(roll_no, name, class_name, photo_path=path, embedding=embedding)
                 st.success(f"Registered {name.strip()} (roll {roll_no.strip()}).")
@@ -56,6 +58,31 @@ with tab_students:
     st.divider()
     st.subheader("Registered students")
     students = database.list_students()
+
+    legacy = [s for s in database.get_students_with_embeddings() if face.is_legacy_embedding(s["embedding"])]
+    if legacy:
+        st.warning(
+            f"{len(legacy)} student(s) were registered with the old face format. "
+            "Rebuild their face data once so they match on any camera."
+        )
+        if st.button("🔄 Rebuild face data from saved photos", key="rebuild_faces"):
+            done, failed = 0, []
+            with st.spinner("Rebuilding face data... this takes a few seconds per student."):
+                for s in database.get_students_with_embeddings():
+                    try:
+                        if not (s["photo_path"] and os.path.exists(s["photo_path"])):
+                            raise face.FaceNotFoundError("saved photo is missing")
+                        with open(s["photo_path"], "rb") as fh:
+                            image = ui.read_image(fh)
+                        database.update_student(s["id"], s["roll_no"], s["name"], s["class_name"],
+                                                embedding=face.get_registration_embeddings(image))
+                        done += 1
+                    except (face.FaceNotFoundError, OSError) as exc:
+                        failed.append(f"{s['roll_no']} ({exc})")
+            st.session_state["flash"] = f"Rebuilt {done} student(s)." + (
+                f" Re-register these with a new photo: {', '.join(failed)}." if failed else "")
+            st.rerun()
+
     if students:
         st.dataframe(
             [{"Roll No": s["roll_no"], "Name": s["name"], "Class": s["class_name"]} for s in students],
@@ -88,7 +115,7 @@ with tab_students:
                         if new_image is not None:
                             with st.spinner("Reading face..."):
                                 image = ui.read_image(new_image)
-                                embedding = face.get_embedding(image)
+                                embedding = face.get_registration_embeddings(image)
                             photo_path = photos.save_photo(new_roll, image)
                         elif new_roll.strip() != cur["roll_no"] and cur["photo_path"]:
                             photo_path = photos.rename_photo(cur["photo_path"], new_roll)

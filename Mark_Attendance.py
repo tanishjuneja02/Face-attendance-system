@@ -68,16 +68,25 @@ else:
                     st.rerun()
 
     if photo is not None:
-        error, match = None, None
+        error, result_match = None, None
         with st.spinner("Recognising face..."):
             try:
-                embedding = face.get_embedding(ui.read_image(photo))
-                match = face.find_best_match(embedding, students)
+                embedding = face.get_scan_embedding(ui.read_image(photo))
+                result_match = face.match_face(embedding, students)
             except face.FaceNotFoundError as exc:
                 error = str(exc)
-
+        match = result_match.match if result_match else None
         if error:
             st.markdown(components.notice("err", "No face detected", error), unsafe_allow_html=True)
+        
+        elif result_match.status == "ambiguous":
+            st.markdown(
+                components.notice("warn", "Could not tell who this is",
+                                  "Your face is very close to another student's. Move closer, face the "
+                                  "camera straight on in good light, and try again."),
+                unsafe_allow_html=True,
+            )
+        
         elif match is None:
             st.markdown(
                 components.notice("err", "Face not recognised",
