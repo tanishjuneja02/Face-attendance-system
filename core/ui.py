@@ -11,6 +11,13 @@ def setup(title, icon="🎓"):
     st.set_page_config(page_title=title, page_icon=icon, layout="wide")
     database.init_db()
     apply_theme()
+    st.markdown(
+        "<style>"
+        "[data-testid='stHeaderActionElements']{display:none !important;}"
+        "h1 a, h2 a, h3 a, h4 a, h5 a, h6 a{display:none !important;}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
 
 
 def _remember_theme():
