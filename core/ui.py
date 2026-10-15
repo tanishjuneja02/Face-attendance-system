@@ -23,7 +23,7 @@ def apply_theme():
     # copied into "theme_dark" (a normal session value) and used as the starting value.
     dark = st.sidebar.toggle(
         "🌙 Dark mode",
-        value=st.session_state.get("theme_dark", False),
+        value=st.session_state.get("theme_dark", True),
         key="dark_toggle",
         on_change=_remember_theme,
     )

@@ -338,3 +338,74 @@ def get_attendance(start_date=None, end_date=None, subject_id=None,
     query += " ORDER BY a.date DESC, a.time DESC"
     with connect(db_path) as conn:
         return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+
+
+
+def get_attendance_summary(student_id, db_path=None):
+    """Per-subject attendance for one student.
+
+    "Classes held" for a subject = the number of days on which anyone was marked
+    present for it, counted from the day the student was registered. Subjects with
+    no classes yet are left out.
+    """
+    with connect(db_path) as conn:
+        student = conn.execute(
+            "SELECT date(created_at) AS since FROM students WHERE id = ?", (student_id,)
+        ).fetchone()
+        if student is None:
+            return []
+        rows = conn.execute(
+            """
+            SELECT sub.name AS subject,
+                   (SELECT COUNT(DISTINCT a.date) FROM attendance a
+                     WHERE a.subject_id = sub.id AND a.date >= ?) AS total,
+                   (SELECT COUNT(*) FROM attendance a
+                     WHERE a.subject_id = sub.id AND a.student_id = ?) AS attended
+            FROM subjects sub
+            ORDER BY sub.name
+            """,
+            (student["since"], student_id),
+        ).fetchall()
+    summary = []
+    for row in rows:
+        if row["total"] == 0:
+            continue
+        attended = min(row["attended"], row["total"])
+        summary.append({
+            "subject": row["subject"],
+            "attended": attended,
+            "total": row["total"],
+            "percent": round(100 * attended / row["total"], 1),
+        })
+    return summary
+
+
+def get_attendance_history(student_id, db_path=None):
+    """Every class held for one student, newest first, marked present or absent.
+
+    A class counts as "held" when anyone was marked present for that subject on that
+    day (counted from the day the student was registered). Each row is a dict with
+    subject, date, time (None when absent) and present (True or False).
+    """
+    with connect(db_path) as conn:
+        student = conn.execute(
+            "SELECT date(created_at) AS since FROM students WHERE id = ?", (student_id,)
+        ).fetchone()
+        if student is None:
+            return []
+        rows = conn.execute(
+            """
+            SELECT sub.name AS subject, d.date AS date, a.time AS time
+            FROM (SELECT DISTINCT subject_id, date FROM attendance WHERE date >= ?) d
+            JOIN subjects sub ON sub.id = d.subject_id
+            LEFT JOIN attendance a
+                   ON a.subject_id = d.subject_id AND a.date = d.date AND a.student_id = ?
+            ORDER BY d.date DESC, sub.name
+            """,
+            (student["since"], student_id),
+        ).fetchall()
+    return [
+        {"subject": r["subject"], "date": r["date"], "time": r["time"], "present": r["time"] is not None}
+        for r in rows
+    ]
