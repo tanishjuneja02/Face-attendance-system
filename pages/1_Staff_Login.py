@@ -4,14 +4,14 @@ import streamlit as st
 from core import auth, database, ui
 
 ui.setup("Staff Login", "🔐")
-st.title("🔐 Staff Login")
+st.title(":material/lock: Staff Login")
 
 staff = ui.current_staff()
 if staff:
     st.success(f"Logged in as **{staff['username']}** ({staff['role']}).")
-    st.page_link("pages/2_Attendance.py", label="View attendance", icon="📊")
+    st.page_link("pages/2_Attendance.py", label="View attendance", icon=":material/bar_chart:")
     if staff["role"] == "admin":
-        st.page_link("pages/3_Register.py", label="Register students and manage staff", icon="🧑‍🎓")
+        st.page_link("pages/3_Register.py", label="Register students and manage staff", icon=":material/school:")
     if st.button("Log out"):
         st.session_state.pop("staff", None)
         st.rerun()

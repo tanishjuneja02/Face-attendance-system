@@ -42,7 +42,15 @@ DARK_CSS = """
 html{filter:invert(1) hue-rotate(180deg) brightness(1.15);}
 .stApp,[data-testid="stAppViewContainer"],[data-testid="stHeader"]{background:#eef1f6 !important;}
 [data-testid="stSidebar"],[data-testid="stSidebar"]>div{background:#e4e8f2 !important;}
-img,video,.fa-hero,.fa-banner{filter:brightness(.87) hue-rotate(180deg) invert(1);}
+img,video,.fa-hero,.fa-banner,.fa-ico{filter:brightness(.87) hue-rotate(180deg) invert(1);}
+.fa-ico{display:inline-block;}
+/* borders for text boxes and drop-downs (colours are flipped by the filter above) */
+[data-testid="stTextInputRootElement"],[data-testid="stNumberInputContainer"],
+[data-testid="stTextInput"] div:has(> input),[data-testid="stNumberInput"] div:has(> input),
+[data-testid="stDateInput"] div:has(> input),[data-testid="stTextArea"] div:has(> textarea),
+[data-testid="stSelectbox"] div:has(> div > [role="combobox"]),
+[data-testid="stFileUploaderDropzone"],[data-testid="stCameraInput"]{
+    border:1px solid #64748b !important;border-radius:8px !important;}
 </style>
 """
 
@@ -62,7 +70,7 @@ def hero(title, subtitle, date_text):
 def stats_row(stats):
     """``stats`` is a list of (icon, label, value) tuples."""
     cards = "".join(
-        f'<div class="fa-stat"><div class="fa-stat-v">{escape(str(icon))} {escape(str(value))}</div>'
+        f'<div class="fa-stat"><div class="fa-stat-v"><span class="fa-ico">{escape(str(icon))}</span> {escape(str(value))}</div>'
         f'<div class="fa-stat-l">{escape(str(label))}</div></div>'
         for icon, label, value in stats
     )
@@ -81,8 +89,8 @@ def result_card(name, roll_no, class_name, subject, date, time):
     return (
         '<div class="fa-result">'
         f'<div class="fa-name">{escape(name)}</div>'
-        f'<span class="fa-badge">🆔 Roll {escape(str(roll_no))}</span>'
-        f'<span class="fa-badge">🏫 {escape(class_name)}</span>'
+        f'<span class="fa-badge"><span class="fa-ico">🆔</span> Roll {escape(str(roll_no))}</span>'
+        f'<span class="fa-badge"><span class="fa-ico">🏫</span> {escape(class_name)}</span>'
         '<div class="fa-grid">'
         f'<div><div class="fa-l">Subject</div><div class="fa-v">{escape(subject)}</div></div>'
         f'<div><div class="fa-l">Date</div><div class="fa-v">{escape(date)}</div></div>'
@@ -96,7 +104,7 @@ def recent_list(rows):
     return "".join(
         '<div class="fa-recent">'
         f'<div><b>{escape(r["name"])}</b><div class="fa-recent-sub">{escape(r["subject"])}</div></div>'
-        f'<div class="fa-recent-sub">🕒 {escape(r["time"])}</div>'
+        f'<div class="fa-recent-sub"><span class="fa-ico">🕒</span> {escape(r["time"])}</div>'
         "</div>"
         for r in rows
     )

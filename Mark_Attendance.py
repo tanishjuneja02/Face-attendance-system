@@ -42,7 +42,7 @@ else:
                 "Subject", list(subject_names), format_func=subject_names.get,
                 label_visibility="collapsed",
             )
-            st.markdown("##### 💡 Tips for a good scan")
+            st.markdown("##### :material/lightbulb: Tips for a good scan")
             st.markdown(
                 "- Face the camera straight on\n"
                 "- Keep the light in front of you, not behind\n"
@@ -58,12 +58,12 @@ else:
             photo = None
             if st.session_state["camera_on"]:
                 photo = st.camera_input("Scan your face", label_visibility="collapsed", key="scan_camera")
-                if st.button("⏹️ Stop camera", use_container_width=True):
+                if st.button(":material/stop_circle: Stop camera", use_container_width=True):
                     st.session_state["camera_on"] = False
                     st.rerun()
             else:
                 st.info("Camera is off.")
-                if st.button("▶️ Start camera", type="primary", use_container_width=True):
+                if st.button(":material/play_arrow: Start camera", type="primary", use_container_width=True):
                     st.session_state["camera_on"] = True
                     st.rerun()
 
@@ -130,7 +130,7 @@ else:
         for r in database.get_attendance(start_date=today, end_date=today)[:5]
     ]
     if recent:
-        st.markdown("##### 🕒 Recent check-ins today")
+        st.markdown("##### :material/schedule: Recent check-ins today")
         st.markdown(components.recent_list(recent), unsafe_allow_html=True)
 
 stats_slot.markdown(

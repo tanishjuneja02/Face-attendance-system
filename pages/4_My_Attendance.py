@@ -11,7 +11,7 @@ MIN_PERCENT = 75  # the usual minimum attendance
 ui.setup("My Attendance", "📈")
 ui.inject_css()
 
-st.title("📈 My Attendance")
+st.title(":material/trending_up: My Attendance")
 st.caption("Enter your roll number to see your percentage, graphs and every class date.")
 
 with st.form("lookup"):
@@ -45,7 +45,7 @@ held = len(df)
 attended = int(df["present"].sum())
 overall = round(100 * attended / held, 1)
 
-tab_summary, tab_graphs, tab_history = st.tabs(["🏠 Summary", "📊 Graphs", "📋 History"])
+tab_summary, tab_graphs, tab_history = st.tabs([":material/home: Summary", ":material/bar_chart: Graphs", ":material/list_alt: History"])
 
 # ------------------------------------------------------------------ summary
 with tab_summary:
@@ -68,7 +68,7 @@ with tab_summary:
 
     st.markdown("##### By subject")
     for _, r in charts.subject_frame(df, MIN_PERCENT).sort_values("subject").iterrows():
-        flag = "" if r["status"] == "ok" else " ⚠️"
+        flag = "" if r["status"] == "ok" else " :material/warning:"
         st.write(f"**{r['subject']}**: {r['attended']} of {r['held']} classes ({r['percent']}%){flag}")
         st.progress(min(r["percent"] / 100, 1.0))
 
@@ -115,7 +115,7 @@ with tab_history:
         })
         st.dataframe(table, use_container_width=True, hide_index=True)
         st.download_button(
-            "⬇️ Download CSV", table.to_csv(index=False).encode("utf-8"),
+            ":material/download: Download CSV", table.to_csv(index=False).encode("utf-8"),
             file_name=f"attendance_{student['roll_no']}.csv", mime="text/csv",
         )
 

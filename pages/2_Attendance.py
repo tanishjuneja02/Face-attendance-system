@@ -9,7 +9,7 @@ from core import attendance, database, ui
 ui.setup("Attendance Records", "📊")
 ui.require_staff()
 
-st.title("📊 Attendance Records")
+st.title(":material/bar_chart: Attendance Records")
 
 today = attendance.now_ist().date()
 subjects = {s["id"]: s["name"] for s in database.list_subjects()}
@@ -43,7 +43,7 @@ if df.empty:
 else:
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.download_button(
-        "⬇️ Download CSV",
+        ":material/download: Download CSV",
         df.to_csv(index=False),
         file_name=f"attendance_{today:%Y%m%d}.csv",
         mime="text/csv",

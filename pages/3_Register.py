@@ -8,7 +8,7 @@ from core import auth, database, face, photos, ui
 ui.setup("Register", "🧑‍🎓")
 ui.require_staff(roles=("admin",))
 
-st.title("🧑‍🎓 Register & Manage")
+st.title(":material/school: Register & Manage")
 if "flash" in st.session_state:  # message saved before a rerun
     st.success(st.session_state.pop("flash"))
 tab_students, tab_subjects, tab_staff = st.tabs(["Students", "Subjects", "Staff accounts"])
@@ -65,7 +65,7 @@ with tab_students:
             f"{len(legacy)} student(s) were registered with the old face format. "
             "Rebuild their face data once so they match on any camera."
         )
-        if st.button("🔄 Rebuild face data from saved photos", key="rebuild_faces"):
+        if st.button(":material/refresh: Rebuild face data from saved photos", key="rebuild_faces"):
             done, failed = 0, []
             with st.spinner("Rebuilding face data... this takes a few seconds per student."):
                 for s in database.get_students_with_embeddings():
@@ -90,7 +90,7 @@ with tab_students:
         )
         labels = {s["id"]: f"{s['roll_no']} - {s['name']} ({s['class_name']})" for s in students}
 
-        with st.expander("✏️ Edit a student"):
+        with st.expander(":material/edit: Edit a student"):
             edit_id = st.selectbox("Select a student to edit", list(labels),
                                    format_func=labels.get, key="edit_student_select")
             cur = next(s for s in students if s["id"] == edit_id)
@@ -133,7 +133,7 @@ with tab_students:
         st.caption("Deactivating hides the student and stops face matching for them. "
                    "Their past attendance is kept, and you can restore them later.")
         confirm = st.checkbox("Yes, deactivate this student", key="deactivate_confirm")
-        if st.button("🚫 Deactivate student", disabled=not confirm, key="deactivate_btn"):
+        if st.button(":material/block: Deactivate student", disabled=not confirm, key="deactivate_btn"):
             database.deactivate_student(chosen)
             st.success("Student deactivated. You can restore them under 'Recently deleted'.")
             st.rerun()
@@ -142,7 +142,7 @@ with tab_students:
 
     # ---- deactivated students: restore or delete permanently
     st.divider()
-    st.subheader("♻️ Recently deleted (deactivated)")
+    st.subheader(":material/restore: Recently deleted (deactivated)")
     deleted = database.list_students(deleted=True)
     if not deleted:
         st.caption("No deactivated students.")
@@ -158,15 +158,15 @@ with tab_students:
 
         col_restore, col_perm = st.columns(2)
         with col_restore:
-            if st.button("♻️ Restore this student", key="restore_btn"):
+            if st.button(":material/restore: Restore this student", key="restore_btn"):
                 database.restore_student(picked)
                 st.success("Student restored.")
                 st.rerun()
         with col_perm:
-            st.caption("⚠️ Permanent delete removes the student, their photo and ALL their attendance. "
+            st.caption(":material/warning: Permanent delete removes the student, their photo and ALL their attendance. "
                        "This cannot be undone.")
             confirm_perm = st.checkbox("Yes, delete permanently", key="perm_confirm")
-            if st.button("🔥 Delete permanently", disabled=not confirm_perm, key="perm_btn"):
+            if st.button(":material/delete_forever: Delete permanently", disabled=not confirm_perm, key="perm_btn"):
                 database.delete_student(picked)
                 photos.delete_photo(picked_student["photo_path"])
                 st.success("Student permanently deleted.")
@@ -200,10 +200,10 @@ with tab_subjects:
                     st.rerun()
                 except (ValueError, database.DuplicateError) as exc:
                     st.error(str(exc))
-        st.caption("⚠️ Deleting a subject also deletes ALL attendance recorded for it. "
+        st.caption(":material/warning: Deleting a subject also deletes ALL attendance recorded for it. "
                    "This cannot be undone.")
         confirm_sub = st.checkbox("Yes, delete this subject and its attendance", key="subject_del_confirm")
-        if st.button("🔥 Delete subject", disabled=not confirm_sub, key="subject_del_btn"):
+        if st.button(":material/delete_forever: Delete subject", disabled=not confirm_sub, key="subject_del_btn"):
             database.delete_subject(sub_id)
             st.session_state["flash"] = "Subject deleted."
             st.rerun()
@@ -254,7 +254,7 @@ with tab_staff:
             st.caption("You are logged in as this account, so its role can't be changed and it can't be deleted here.")
         else:
             confirm_acct = st.checkbox("Yes, delete this account", key="staff_del_confirm")
-            if st.button("🔥 Delete account", disabled=not confirm_acct, key="staff_del_btn"):
+            if st.button(":material/delete_forever: Delete account", disabled=not confirm_acct, key="staff_del_btn"):
                 try:
                     auth.delete_staff(staff_id)
                     st.session_state["flash"] = "Account deleted."

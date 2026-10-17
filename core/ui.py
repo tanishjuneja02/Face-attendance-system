@@ -28,9 +28,11 @@ def apply_theme():
     """Sidebar Light/Dark switch. The choice is remembered when you change pages."""
     # A widget's own state is dropped when you open another page, so the choice is
     # copied into "theme_dark" (a normal session value) and used as the starting value.
+    was_dark = st.session_state.get("theme_dark", True)
+    label = ":material/dark_mode: Dark mode" if was_dark else ":material/light_mode: Light mode"
     dark = st.sidebar.toggle(
-        "🌙 Dark mode",
-        value=st.session_state.get("theme_dark", True),
+        label,
+        value=was_dark,
         key="dark_toggle",
         on_change=_remember_theme,
     )
@@ -57,7 +59,7 @@ def require_staff(roles=("teacher", "admin")):
     staff = current_staff()
     if staff is None:
         st.warning("Please log in as staff to view this page.")
-        st.page_link("pages/1_Staff_Login.py", label="Go to Staff Login", icon="🔐")
+        st.page_link("pages/1_Staff_Login.py", label="Go to Staff Login", icon=":material/lock:")
         st.stop()
     if staff["role"] not in roles:
         st.error("Your account does not have access to this page.")
@@ -69,7 +71,7 @@ def require_staff(roles=("teacher", "admin")):
 def sidebar_user():
     staff = current_staff()
     if staff:
-        st.sidebar.write(f"👤 **{staff['username']}** ({staff['role']})")
+        st.sidebar.write(f":material/person: **{staff['username']}** ({staff['role']})")
         if st.sidebar.button("Log out"):
             st.session_state.pop("staff", None)
             st.rerun()
