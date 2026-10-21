@@ -3,7 +3,8 @@ pandas
 numpy<2
 pillow
 opencv-python-headless==4.9.0.80
-deepface
+deepface==0.0.102
 tensorflow-cpu
 tf-keras
 libsql
+flask
