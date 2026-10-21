@@ -145,12 +145,17 @@ def list_students(class_name=None, db_path=None, deleted=False):
         return [dict(r) for r in conn.execute(query, params).fetchall()]
 
 
-def get_students_with_embeddings(db_path=None):
-    """Active students that have a stored face, as dicts with an 'embedding' list."""
+def get_students_with_embeddings(db_path=None, include_deleted=False):
+    """Students that have a stored face, as dicts with an 'embedding' list.
+
+    Only active students by default. include_deleted=True also returns deactivated ones
+    (used to stop the same face being registered again under a new name).
+    """
+    query = "SELECT * FROM students WHERE embedding IS NOT NULL"
+    if not include_deleted:
+        query += " AND is_deleted = 0"
     with connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT * FROM students WHERE embedding IS NOT NULL AND is_deleted = 0"
-        ).fetchall()
+        rows = conn.execute(query).fetchall()
     return [_student_row(r) for r in rows]
 
 

@@ -58,3 +58,27 @@ def mark_attendance(student_id, subject_id, now=None, db_path=None):
             (student_id, subject_id, date, time),
         )
     return MarkResult("marked", date, time)
+
+
+def absent_days(history):
+    """Days a student missed at least one class, newest first, with the subjects missed.
+
+    history is the list from database.get_attendance_history(). Each result is a dict:
+    date, subjects (missed that day), whole_day (True if they were present in nothing that
+    day) and attended (subjects they did attend that day).
+    """
+    by_date = {}
+    for row in history:
+        day = by_date.setdefault(row["date"], {"missed": [], "attended": []})
+        day["attended" if row["present"] else "missed"].append(row["subject"])
+    days = []
+    for date, day in by_date.items():
+        if day["missed"]:
+            days.append({
+                "date": date,
+                "subjects": sorted(day["missed"]),
+                "attended": sorted(day["attended"]),
+                "whole_day": not day["attended"],
+            })
+    days.sort(key=lambda d: d["date"], reverse=True)
+    return days

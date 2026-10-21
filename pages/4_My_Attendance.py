@@ -66,6 +66,25 @@ with tab_summary:
             f"Attend the next {needed} classes in a row to reach {MIN_PERCENT}%."),
             unsafe_allow_html=True)
 
+    missed_days = attendance.absent_days(history)
+    if missed_days:
+        st.markdown("##### Days you were absent")
+        for d in missed_days[:10]:
+            weekday = pd.to_datetime(d["date"]).strftime("%A")
+            missed = ", ".join(d["subjects"])
+            if d["whole_day"]:
+                st.markdown(components.notice(
+                    "err", f"{d['date']} ({weekday}): absent the whole day",
+                    f"You did not mark attendance in any class. Absent in: {missed}."),
+                    unsafe_allow_html=True)
+            else:
+                st.markdown(components.notice(
+                    "warn", f"{d['date']} ({weekday}): absent in some classes",
+                    f"Absent in: {missed}. Present in: {', '.join(d['attended'])}."),
+                    unsafe_allow_html=True)
+        if len(missed_days) > 10:
+            st.caption(f"Showing the latest 10 of {len(missed_days)} days. See the History tab for everything.")
+
     st.markdown("##### By subject")
     for _, r in charts.subject_frame(df, MIN_PERCENT).sort_values("subject").iterrows():
         flag = "" if r["status"] == "ok" else " :material/warning:"

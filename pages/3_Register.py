@@ -13,6 +13,21 @@ if "flash" in st.session_state:  # message saved before a rerun
     st.success(st.session_state.pop("flash"))
 tab_students, tab_subjects, tab_staff = st.tabs(["Students", "Subjects", "Staff accounts"])
 
+def _reject_if_face_exists(embedding, exclude_id=None):
+    """Raise DuplicateError if this face already belongs to a registered student (active or deactivated)."""
+    everyone = database.get_students_with_embeddings(include_deleted=True)
+    hit = face.find_duplicate(embedding, everyone, exclude_id=exclude_id)
+    if hit is None:
+        return
+    owner = database.get_student(hit.student_id)
+    who = f"{owner['name']} (roll {owner['roll_no']}, {owner['class_name']})"
+    if owner["is_deleted"]:
+        raise database.DuplicateError(
+            f"This face is already registered to {who}, who is deactivated. "
+            "Restore them from 'Recently deleted' instead of registering again.")
+    raise database.DuplicateError(f"This face is already registered to {who}.")
+
+
 # ------------------------------------------------------------------ students
 with tab_students:
     st.subheader("Register a new student")
@@ -48,6 +63,7 @@ with tab_students:
                 with st.spinner("Reading face..."):
                     image = ui.read_image(image_file)
                     embedding = face.get_registration_embeddings(image)
+                _reject_if_face_exists(embedding)
                 path = photos.save_photo(roll_no, image)
                 database.add_student(roll_no, name, class_name, photo_path=path, embedding=embedding)
                 st.success(f"Registered {name.strip()} (roll {roll_no.strip()}).")
@@ -116,6 +132,7 @@ with tab_students:
                             with st.spinner("Reading face..."):
                                 image = ui.read_image(new_image)
                                 embedding = face.get_registration_embeddings(image)
+                            _reject_if_face_exists(embedding, exclude_id=edit_id)
                             photo_path = photos.save_photo(new_roll, image)
                         elif new_roll.strip() != cur["roll_no"] and cur["photo_path"]:
                             photo_path = photos.rename_photo(cur["photo_path"], new_roll)

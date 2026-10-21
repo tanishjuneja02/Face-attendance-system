@@ -96,6 +96,23 @@ def match_face(embedding, candidates, threshold=DEFAULT_THRESHOLD, margin=None):
     return MatchResult("matched", Match(student_id=best_id, distance=best_distance))
 
 
+def find_duplicate(embeddings, candidates, threshold=DEFAULT_THRESHOLD, exclude_id=None):
+    """Return the Match for a stored student whose face is the same as this new photo, else None.
+
+    embeddings is what get_registration_embeddings() returned (the first one is the real photo).
+    Only that real-photo embedding is compared, because the degraded copies are blurrier and
+    would raise false alarms. exclude_id skips one student (used when editing their own photo).
+    """
+    if not embeddings:
+        return None
+    probe = embeddings[0]
+    others = [c for c in candidates if c["id"] != exclude_id]
+    ranked = _student_distances(probe, others)
+    if ranked and ranked[0][1] <= threshold:
+        return Match(student_id=ranked[0][0], distance=ranked[0][1])
+    return None
+
+
 def find_best_match(embedding, candidates, threshold=DEFAULT_THRESHOLD):
     """Return the closest candidate within the threshold, or None (unknown or ambiguous)."""
     return match_face(embedding, candidates, threshold).match
