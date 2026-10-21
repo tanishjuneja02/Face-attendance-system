@@ -1,5 +1,5 @@
 """Admin: register students (with face), deactivate/restore/delete them, manage subjects and staff."""
-import os
+import io
 
 import streamlit as st
 
@@ -86,10 +86,10 @@ with tab_students:
             with st.spinner("Rebuilding face data... this takes a few seconds per student."):
                 for s in database.get_students_with_embeddings():
                     try:
-                        if not (s["photo_path"] and os.path.exists(s["photo_path"])):
+                        photo_bytes = photos.read_photo_bytes(s["photo_path"])
+                        if photo_bytes is None:
                             raise face.FaceNotFoundError("saved photo is missing")
-                        with open(s["photo_path"], "rb") as fh:
-                            image = ui.read_image(fh)
+                        image = ui.read_image(io.BytesIO(photo_bytes))
                         database.update_student(s["id"], s["roll_no"], s["name"], s["class_name"],
                                                 embedding=face.get_registration_embeddings(image))
                         done += 1

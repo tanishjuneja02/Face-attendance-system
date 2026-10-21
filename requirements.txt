@@ -6,3 +6,4 @@ opencv-python-headless==4.9.0.80
 deepface
 tensorflow-cpu
 tf-keras
+libsql

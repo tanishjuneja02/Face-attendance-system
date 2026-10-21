@@ -1,9 +1,7 @@
 """Home page: students scan their face to mark attendance (no login needed)."""
-import os
-
 import streamlit as st
 
-from core import attendance, components, database, face, ui
+from core import attendance, components, database, face, photos, ui
 
 ui.setup("Face Attendance", "📷")
 ui.inject_css()
@@ -113,8 +111,9 @@ else:
 
             photo_col, details_col = st.columns([1, 2.2], gap="large")
             with photo_col:
-                if student["photo_path"] and os.path.exists(student["photo_path"]):
-                    st.image(student["photo_path"], caption="Registered photo", use_container_width=True)
+                photo_bytes = photos.read_photo_bytes(student["photo_path"])
+                if photo_bytes:
+                    st.image(photo_bytes, caption="Registered photo", use_container_width=True)
             with details_col:
                 st.markdown(
                     components.result_card(

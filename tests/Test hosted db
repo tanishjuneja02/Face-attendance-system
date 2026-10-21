@@ -1,0 +1,73 @@
+"""The hosted-database code path, tested against a local libsql file (no internet needed)."""
+import numpy as np
+import pytest
+
+libsql = pytest.importorskip("libsql")
+
+from core import database, photos  # noqa: E402
+
+
+@pytest.fixture
+def hosted(tmp_path, monkeypatch):
+    """Pretend the hosted database is configured, backed by a temporary local file."""
+    path = str(tmp_path / "hosted.db")
+    monkeypatch.setattr(database, "_remote_config", lambda: ("libsql://test", "token"))
+    monkeypatch.setattr(database, "_open_remote",
+                        lambda: database._LibsqlConnection(libsql.connect(path)))
+    monkeypatch.setattr(database, "_remote_ready", False)
+    database.init_db()
+    return path
+
+
+def test_students_and_attendance_work_on_hosted_db(hosted):
+    from core import attendance
+    sid = database.add_student("7", "Asha", "CS-3A", embedding=[[1.0, 0.0]])
+    subject = database.list_subjects()[0]["id"]
+    assert attendance.mark_attendance(sid, subject).marked
+    assert not attendance.mark_attendance(sid, subject).marked  # same day again
+    assert database.count_students() == 1
+    assert database.get_student_by_roll("7")["name"] == "Asha"
+    assert database.get_students_with_embeddings()[0]["embedding"] == [[1.0, 0.0]]
+
+
+def test_duplicate_roll_number_is_still_reported(hosted):
+    database.add_student("7", "Asha", "CS-3A")
+    with pytest.raises(database.DuplicateError):
+        database.add_student("7", "Someone Else", "CS-3B")
+
+
+def test_deleting_a_student_removes_their_attendance(hosted):
+    from core import attendance
+    sid = database.add_student("7", "Asha", "CS-3A")
+    attendance.mark_attendance(sid, database.list_subjects()[0]["id"])
+    assert database.delete_student(sid)
+    assert database.get_attendance() == []
+
+
+def test_init_db_runs_only_once_per_process(hosted, monkeypatch):
+    calls = []
+    real = database.connect
+    monkeypatch.setattr(database, "connect", lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+    database.init_db()
+    assert calls == []  # already initialised by the fixture
+
+
+def test_photo_survives_losing_the_disk(hosted, tmp_path):
+    image = np.full((100, 80, 3), 120, dtype=np.uint8)
+    path = photos.save_photo("CS/7", image, photo_dir=str(tmp_path / "photos"))
+    import os
+    os.remove(path)  # the app's disk is wiped on restart
+    assert photos.read_photo_bytes(path)[:2] == b"\xff\xd8"  # still a JPEG, from the database
+
+
+def test_renaming_and_deleting_photo_updates_the_database_copy(hosted, tmp_path):
+    import os
+    image = np.full((60, 60, 3), 90, dtype=np.uint8)
+    photo_dir = str(tmp_path / "photos")
+    old = photos.save_photo("7", image, photo_dir=photo_dir)
+    os.remove(old)
+    new = photos.rename_photo(old, "8", photo_dir=photo_dir)
+    assert new != old and photos.read_photo_bytes(new) is not None
+    assert photos.read_photo_bytes(old) is None
+    photos.delete_photo(new)
+    assert photos.read_photo_bytes(new) is None

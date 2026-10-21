@@ -7,7 +7,13 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
+
+try:  # only needed when the hosted (Turso) database is used
+    import libsql
+except ImportError:  # pragma: no cover
+    libsql = None
 
 DEFAULT_DB_PATH = os.environ.get("ATTENDANCE_DB", "data/attendance.db")
 DEFAULT_SUBJECTS = ["Mathematics", "Physics", "Chemistry", "English", "Computer Science"]
@@ -37,6 +43,11 @@ CREATE TABLE IF NOT EXISTS subjects (
     name  TEXT UNIQUE NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS photo_store (
+    path  TEXT PRIMARY KEY,
+    data  BLOB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS attendance (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -52,14 +63,143 @@ class DuplicateError(Exception):
     """Raised when a unique value (roll number, username, subject) already exists."""
 
 
-@contextmanager
-def connect(db_path=None):
-    """Open a connection, commit on success, roll back on error, always close."""
-    path = str(db_path or DEFAULT_DB_PATH)
+# ------------------------------------------------------------ hosted database
+# On Streamlit Community Cloud the app's disk is wiped whenever the app sleeps, reboots or
+# redeploys, so a local SQLite file loses all data. Set TURSO_DATABASE_URL and
+# TURSO_AUTH_TOKEN (Streamlit Secrets or environment variables) to keep the data in a hosted
+# Turso database instead. Without them the app uses the local file, as before.
+@lru_cache(maxsize=1)
+def _secrets_config():
+    try:
+        import streamlit as st
+        url = st.secrets.get("TURSO_DATABASE_URL")
+        token = st.secrets.get("TURSO_AUTH_TOKEN")
+        return (str(url), str(token) if token else None) if url else None
+    except Exception:  # no secrets file, or streamlit not available
+        return None
+
+
+def _remote_config():
+    """(url, token) of the hosted database, or None to use the local SQLite file."""
+    url = os.environ.get("TURSO_DATABASE_URL")
+    if url:
+        return url, os.environ.get("TURSO_AUTH_TOKEN")
+    return _secrets_config()
+
+
+def using_remote():
+    """True when data is stored in the hosted database (so it survives app restarts)."""
+    return _remote_config() is not None
+
+
+class _Row:
+    """A result row that works like sqlite3.Row: row["name"], row[0], dict(row)."""
+
+    def __init__(self, names, values):
+        self._names, self._values = list(names), tuple(values)
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            try:
+                return self._values[self._names.index(key)]
+            except ValueError:
+                raise IndexError(f"No column named '{key}'") from None
+        return self._values[key]
+
+    def keys(self):
+        return list(self._names)
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+
+class _Cursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def _names(self):
+        return [d[0] for d in (self._cursor.description or [])]
+
+    def fetchone(self):
+        names = self._names()
+        row = self._cursor.fetchone()
+        return None if row is None else _Row(names, row)
+
+    def fetchall(self):
+        names = self._names()
+        return [_Row(names, r) for r in self._cursor.fetchall()]
+
+    def __iter__(self):
+        return iter(self.fetchall())
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    @property
+    def lastrowid(self):
+        return self._cursor.lastrowid
+
+
+class _LibsqlConnection:
+    """Makes a libsql connection behave like the sqlite3 one the rest of this file expects."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=()):
+        try:
+            return _Cursor(self._conn.execute(sql, tuple(params)))
+        except ValueError as exc:  # libsql reports constraint errors as ValueError
+            if "constraint failed" in str(exc).lower():
+                raise sqlite3.IntegrityError(str(exc)) from exc
+            raise
+
+    def executescript(self, script):
+        for statement in script.split(";"):
+            if statement.strip():
+                self.execute(statement)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        close = getattr(self._conn, "close", None)
+        if close:
+            close()
+
+
+def _open_remote():
+    if libsql is None:
+        raise RuntimeError("The 'libsql' package is needed for the hosted database. "
+                           "Run: pip install libsql")
+    url, token = _remote_config()
+    return _LibsqlConnection(libsql.connect(url, auth_token=token or ""))
+
+
+def _open_local(path):
+    path = str(path or DEFAULT_DB_PATH)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+@contextmanager
+def connect(db_path=None):
+    """Open a connection, commit on success, roll back on error, always close.
+
+    An explicit db_path always means a local SQLite file (tests). With no path, the hosted
+    database is used when it is configured, otherwise the default local file.
+    """
+    conn = _open_remote() if (db_path is None and using_remote()) else _open_local(db_path)
     try:
         yield conn
         conn.commit()
@@ -77,13 +217,26 @@ def _migrate(conn):
         conn.execute("ALTER TABLE students ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
 
 
+_remote_ready = False
+
+
 def init_db(db_path=None):
-    """Create the tables (if missing), upgrade old databases, add default subjects."""
+    """Create the tables (if missing), upgrade old databases, add default subjects.
+
+    Streamlit runs every page on every click, so for the hosted database this is done only
+    once per app process (each call would otherwise cost several network round trips).
+    """
+    global _remote_ready
+    remote = db_path is None and using_remote()
+    if remote and _remote_ready:
+        return
     with connect(db_path) as conn:
         conn.executescript(SCHEMA)
         _migrate(conn)
         for name in DEFAULT_SUBJECTS:
             conn.execute("INSERT OR IGNORE INTO subjects (name) VALUES (?)", (name,))
+    if remote:
+        _remote_ready = True
 
 
 # ---------------------------------------------------------------- students
@@ -218,8 +371,40 @@ def count_present_on(date, db_path=None):
 def delete_student(student_id, db_path=None):
     """PERMANENTLY delete a student and their attendance. Returns True if a row was removed."""
     with connect(db_path) as conn:
+        conn.execute("DELETE FROM attendance WHERE student_id = ?", (student_id,))
         cur = conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
         return cur.rowcount > 0
+
+
+# ------------------------------------------------------------ photo storage
+# Photos live on disk, which the hosted app loses on restart, so a copy is kept in the database.
+def save_photo_blob(path, data, db_path=None):
+    with connect(db_path) as conn:
+        conn.execute("INSERT OR REPLACE INTO photo_store (path, data) VALUES (?, ?)", (str(path), data))
+
+
+def get_photo_blob(path, db_path=None):
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT data FROM photo_store WHERE path = ?", (str(path),)).fetchone()
+    return bytes(row["data"]) if row else None
+
+
+def move_photo_blob(old_path, new_path, db_path=None):
+    """Re-key a stored photo. Returns True if there was one to move."""
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT data FROM photo_store WHERE path = ?", (str(old_path),)).fetchone()
+        if row is None:
+            return False
+        conn.execute("INSERT OR REPLACE INTO photo_store (path, data) VALUES (?, ?)",
+                     (str(new_path), row["data"]))
+        if str(old_path) != str(new_path):
+            conn.execute("DELETE FROM photo_store WHERE path = ?", (str(old_path),))
+        return True
+
+
+def delete_photo_blob(path, db_path=None):
+    with connect(db_path) as conn:
+        conn.execute("DELETE FROM photo_store WHERE path = ?", (str(path),))
 
 
 # ---------------------------------------------------------------- subjects
@@ -250,6 +435,7 @@ def update_subject(subject_id, name, db_path=None):
 def delete_subject(subject_id, db_path=None):
     """PERMANENTLY delete a subject and all attendance recorded for it."""
     with connect(db_path) as conn:
+        conn.execute("DELETE FROM attendance WHERE subject_id = ?", (subject_id,))
         return conn.execute("DELETE FROM subjects WHERE id = ?", (subject_id,)).rowcount > 0
 
 
