@@ -1,7 +1,7 @@
 """Home page: students scan their face to mark attendance (no login needed)."""
 import streamlit as st
 
-from core import attendance, components, database, face, photos, ui
+from core import attendance, cache, components, database, face, photos, ui
 
 ui.setup("Face Attendance", "📷")
 ui.inject_css()
@@ -17,19 +17,10 @@ st.markdown(
     ),
     unsafe_allow_html=True,
 )
-stats_slot = st.empty()  # filled at the end so the numbers include this scan
-
-subjects = database.list_subjects()
-students = database.get_students_with_embeddings()
-
-if not subjects:
-    st.markdown(components.notice("warn", "No subjects yet", "Staff must add subjects first."),
-                unsafe_allow_html=True)
-elif not students:
-    st.markdown(components.notice("info", "No students registered yet",
-                                  "Ask the admin to register students first."),
-                unsafe_allow_html=True)
-else:
+@st.fragment
+def scanner(subjects, students, today):
+    """Only this part re-runs when you scan, pick a subject or toggle the camera."""
+    stats_slot = st.empty()  # filled at the end so the numbers include this scan
     subject_names = {s["id"]: s["name"] for s in subjects}
 
     left, right = st.columns([1, 1.4], gap="large")
@@ -58,12 +49,12 @@ else:
                 photo = st.camera_input("Scan your face", label_visibility="collapsed", key="scan_camera")
                 if st.button(":material/stop_circle: Stop camera", use_container_width=True):
                     st.session_state["camera_on"] = False
-                    st.rerun()
+                    st.rerun(scope="fragment")
             else:
                 st.info("Camera is off.")
                 if st.button(":material/play_arrow: Start camera", type="primary", use_container_width=True):
                     st.session_state["camera_on"] = True
-                    st.rerun()
+                    st.rerun(scope="fragment")
 
     if photo is not None:
         error, result_match = None, None
@@ -76,7 +67,7 @@ else:
         match = result_match.match if result_match else None
         if error:
             st.markdown(components.notice("err", "No face detected", error), unsafe_allow_html=True)
-        
+
         elif result_match.status == "ambiguous":
             st.markdown(
                 components.notice("warn", "Could not tell who this is",
@@ -84,7 +75,7 @@ else:
                                   "camera straight on in good light, and try again."),
                 unsafe_allow_html=True,
             )
-        
+
         elif match is None:
             st.markdown(
                 components.notice("err", "Face not recognised",
@@ -96,6 +87,8 @@ else:
             result = attendance.mark_attendance(student["id"], subject_id)
 
             if result.marked:
+                cache.stats.clear()         # so the numbers below include this scan
+                cache.recent_today.clear()
                 st.markdown(
                     components.notice("ok", f"Attendance marked for {student['name']}",
                                       "You're all set. Have a great class!"),
@@ -124,21 +117,33 @@ else:
                 )
                 st.caption(f"Match distance: {match.distance:.2f} (lower is a closer match)")
 
-    recent = [
-        {**r, "time": attendance.to_12h(r["time"])}
-        for r in database.get_attendance(start_date=today, end_date=today)[:5]
-    ]
+    recent = [{**r, "time": attendance.to_12h(r["time"])} for r in cache.recent_today(today)]
     if recent:
         st.markdown("##### :material/schedule: Recent check-ins today")
         st.markdown(components.recent_list(recent), unsafe_allow_html=True)
 
-stats_slot.markdown(
-    components.stats_row([
-        ("🎓", "Registered students", database.count_students()),
-        ("✅", "Present today", database.count_present_on(today)),
-        ("📚", "Subjects", len(subjects)),
-    ]),
-    unsafe_allow_html=True,
-)
+    n_students, n_present = cache.stats(today)
+    stats_slot.markdown(
+        components.stats_row([
+            ("🎓", "Registered students", n_students),
+            ("✅", "Present today", n_present),
+            ("📚", "Subjects", len(subjects)),
+        ]),
+        unsafe_allow_html=True,
+    )
+
+
+subjects = cache.subjects()
+students = cache.students_with_embeddings()
+
+if not subjects:
+    st.markdown(components.notice("warn", "No subjects yet", "Staff must add subjects first."),
+                unsafe_allow_html=True)
+elif not students:
+    st.markdown(components.notice("info", "No students registered yet",
+                                  "Ask the admin to register students first."),
+                unsafe_allow_html=True)
+else:
+    scanner(subjects, students, today)
 
 st.sidebar.info("Teachers and admins: use **Staff Login** in the menu above.")

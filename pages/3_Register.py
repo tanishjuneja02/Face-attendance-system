@@ -3,10 +3,11 @@ import io
 
 import streamlit as st
 
-from core import auth, database, face, photos, ui
+from core import auth, cache, database, face, photos, ui
 
 ui.setup("Register", "🧑‍🎓")
 ui.require_staff(roles=("admin",))
+cache.clear_all()  # data may change on this page, so the home page must re-read it
 
 st.title(":material/school: Register & Manage")
 if "flash" in st.session_state:  # message saved before a rerun
@@ -278,3 +279,5 @@ with tab_staff:
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
+
+cache.clear_all()  # also clear after changes that did not trigger a rerun
